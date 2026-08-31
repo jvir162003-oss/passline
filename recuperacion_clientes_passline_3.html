@@ -659,6 +659,25 @@
     {v:'sin_respuesta',l:'Sin respuesta'}
   ];
   function estadoLabel(v){ for(var i=0;i<ESTADOS.length;i++) if(ESTADOS[i].v===v) return ESTADOS[i].l; return 'Sin contactar'; }
+  // Texto ordenado con los datos del cliente + su nota de reunión, para copiar todo junto
+  function buildCopyBlock(r,a,s){
+    var em=emailOf(r);
+    var L=[];
+    L.push(nameOf(r)+(r.nombre_org&&r.nombre_org!==nameOf(r)?' ('+r.nombre_org+')':''));
+    if(r.ext_id) L.push('ID Excel: '+r.ext_id);
+    if(r.rut) L.push('RUT: '+r.rut);
+    if(r.tel1) L.push('Teléfono: '+r.tel1+(r.tel2&&r.tel2!==r.tel1?' / '+r.tel2:''));
+    if(em) L.push('Email: '+em);
+    if(r.ejec) L.push('Ejecutivo: '+r.ejec+(r.cond?' · condición '+r.cond:''));
+    L.push('Estado: '+estadoLabel(s));
+    if(hasCita(r.id)){
+      L.push('Reunión: '+fechaLarga(a.cita_fecha)+' · '+a.cita_hora+(a.cita_modalidad?' · '+a.cita_modalidad:''));
+    }
+    L.push('');
+    L.push('Notas de la reunión:');
+    L.push(a.nota_reunion?a.nota_reunion:'(sin nota)');
+    return L.join('\n');
+  }
   // Cambio manual de estado desde la ficha
   function setEstado(r,v){
     var s=state[r.id]=state[r.id]||{};
@@ -812,8 +831,16 @@
       '<div style="margin-top:7px"><select id="estadoSel" style="font-size:11.5px;padding:5px 8px;width:auto">'+
       ESTADOS.map(function(o){ return '<option value="'+o.v+'"'+(s===o.v?' selected':'')+'>'+esc(o.l)+'</option>'; }).join('')+
       '</select></div></div></div>';
-    h+='<div class="cgrid">'+cf('RUT',r.rut,'text')+cf('Teléfono',r.tel1,'tel')+
+    h+='<div class="cgrid">'+cf('ID Excel',r.ext_id,'text')+cf('RUT',r.rut,'text')+cf('Teléfono',r.tel1,'tel')+
       (r.tel2&&r.tel2!==r.tel1?cf('Teléfono 2',r.tel2,'tel'):'')+cf('Email',email,'email')+'</div></div>';
+
+    h+='<div class="card"><h3>📝 Notas de la reunión</h3>'+
+      '<textarea id="notaReunion" style="min-height:70px" placeholder="Qué se habló en la reunión…">'+esc(a.nota_reunion||'')+'</textarea>'+
+      '<div class="acts"><button type="button" class="btn ok" id="guardarNotaBtn">Guardar nota</button>'+
+      '<button type="button" class="btn" id="copyAllBtn">📋 Copiar datos y nota</button>'+
+      '<span class="saved" id="savedNota">✓ Guardada</span>'+
+      (a.nota_reunion_fecha?'<span class="spacer"></span><span style="font-size:11px;color:var(--text-faint)">Última edición: '+new Date(a.nota_reunion_fecha).toLocaleString('es-CL')+'</span>':'')+
+      '</div></div>';
 
     if(cita){
       h+='<div class="citabox"><div class="when">'+esc(fechaLarga(a.cita_fecha))+' · '+esc(a.cita_hora)+'</div>'+
@@ -969,6 +996,22 @@
     if(gc) gc.addEventListener('click',function(){ window.open(gcalUrl(r),'_blank'); });
     var wc=document.getElementById('waConfirmBtn');
     if(wc) wc.addEventListener('click',function(){ openWa(r,fill(TPL.waConfirm,r)); });
+    var gnb=document.getElementById('guardarNotaBtn');
+    if(gnb) gnb.addEventListener('click',function(){
+      var s=state[r.id]=state[r.id]||{};
+      s.nota_reunion=document.getElementById('notaReunion').value.trim();
+      s.nota_reunion_fecha=new Date().toISOString();
+      saveState(r.id);
+      var sv=document.getElementById('savedNota'); sv.classList.add('show');
+      setTimeout(function(){sv.classList.remove('show');},1300);
+      toast('Nota guardada.');
+      renderDetail();
+    });
+    var cab=document.getElementById('copyAllBtn');
+    if(cab) cab.addEventListener('click',function(){
+      copy(buildCopyBlock(r,ans(r.id),st(r.id)));
+      toast('Datos y nota copiados.');
+    });
 
     // Guardar la encuesta, con o sin reunion
     document.getElementById('fResp').addEventListener('submit',function(e){
@@ -1420,7 +1463,9 @@
       'datos_cliente','contactado_antes','comentario_1',
       'motivo_principal','motivo_otros','motivo_final','comentario_2','volveria_si_mejora',
       // Reunion
-      'reunion_fecha','reunion_hora','reunion_duracion','reunion_modalidad','reunion_con','reunion_resultado','reunion_notas'];
+      'reunion_fecha','reunion_hora','reunion_duracion','reunion_modalidad','reunion_con','reunion_resultado','reunion_notas',
+      // Nota libre de la reunion (qué se habló)
+      'nota_reunion','nota_reunion_fecha'];
     var out=[cols.join(';')];
     RECORDS.forEach(function(r){
       var a=ans(r.id), s=st(r.id);
@@ -1431,7 +1476,8 @@
         estadoLabel(s),a.canal||'',soloFecha(a.fecha_envio),soloFecha(a.fecha_seguimiento),soloFecha(a.fecha_respuesta),
         a.q_datos||r.rut||'',a.q_contactado_antes||'',a.q_comentario1||'',
         a.q_motivo||'',a.q_motivo_otros||'',motivoFinal,a.q_comentario2||'',a.q_volveria||'',
-        fechaCorta(a.cita_fecha),a.cita_hora||'',a.cita_dur||'',a.cita_modalidad||'',a.cita_con||'',a.cita_resultado||'',a.cita_notas||''
+        fechaCorta(a.cita_fecha),a.cita_hora||'',a.cita_dur||'',a.cita_modalidad||'',a.cita_con||'',a.cita_resultado||'',a.cita_notas||'',
+        a.nota_reunion||'',soloFecha(a.nota_reunion_fecha)
       ].map(ce).join(';'));
     });
     dl(new Blob(['﻿'+out.join('\r\n')],{type:'text/csv;charset=utf-8;'}),'informe_recuperacion_'+stamp()+'.csv');
