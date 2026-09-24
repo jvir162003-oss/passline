@@ -335,6 +335,18 @@
   .hero-stat .hero-l{font-size:14px; font-weight:650; color:var(--text);}
   .hero-stat .hero-s{font-size:12px; color:var(--text-faint);}
   .sec-t{font-size:14.5px; font-weight:680; margin:0 0 3px; letter-spacing:-.01em;}
+  #printArea{display:none;}
+  .print-header{margin-bottom:20px; border-bottom:2px solid var(--good); padding-bottom:12px;}
+  .print-header h1{margin:0 0 4px; font-size:22px; letter-spacing:-.01em;}
+  .print-sub{color:var(--text-faint); font-size:12px;}
+  .print-section-title{font-size:16px; font-weight:700; margin:0 0 12px; padding-top:16px; border-top:1px solid var(--border);}
+  .print-section-title.first{border-top:none; padding-top:0;}
+  @media print{
+    body.printing > *:not(#printArea){display:none !important;}
+    body.printing #printArea{display:block !important; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    body.printing .kpi-grid,body.printing table.tbl,body.printing .chart,body.printing .hero-stat{break-inside:avoid;}
+    .print-pagebreak{page-break-before:always;}
+  }
   .sec-s{font-size:12px; color:var(--text-faint); margin:0 0 14px;}
 
   footer{padding:6px 20px; background:var(--panel); border-top:1px solid var(--border); font-size:10.5px; color:var(--text-faint); text-align:center;}
@@ -556,6 +568,8 @@
   <div class="df"><button class="btn primary" id="waApiClose">Cerrar</button></div>
 </dialog>
 
+<div id="printArea"></div>
+
 <dialog id="resDlg" style="max-width:1080px">
   <div class="dh">Resultados<span class="sp"></span></div>
   <div class="seg" id="resTabs">
@@ -564,7 +578,7 @@
     <button data-tab="enc">Encuesta</button>
   </div>
   <div class="db viz-root" id="resBody"></div>
-  <div class="df"><button class="btn" id="resExport">⬇ Informe completo</button><button class="btn primary" id="resClose">Cerrar</button></div>
+  <div class="df"><button class="btn" id="resPrint">🖨 Informe ejecutivo (PDF)</button><button class="btn" id="resExport">⬇ Informe completo (CSV)</button><button class="btn primary" id="resClose">Cerrar</button></div>
 </dialog>
 
 <div class="toast" id="toast"></div>
@@ -1400,6 +1414,23 @@
   function kpiTile(l,v,s,accent){
     return '<div class="kpi'+(accent?' accent':'')+'"><div class="v">'+v+'</div><div class="l">'+esc(l)+'</div>'+(s?'<div class="s" style="font-size:11px;color:var(--text-faint);margin-top:2px">'+esc(s)+'</div>':'')+'</div>';
   }
+  var lastResReport=null;
+  function printInformeEjecutivo(){
+    if(!lastResReport){ toast('Todavía no hay datos para el informe.'); return; }
+    var fecha=new Date().toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'});
+    var printArea=document.getElementById('printArea');
+    printArea.innerHTML=
+      '<div class="print-header"><h1>Informe de Recuperación de Clientes</h1>'+
+      '<div class="print-sub">Passline · Generado el '+fecha+'</div></div>'+
+      '<h2 class="print-section-title first">Resumen ejecutivo</h2>'+lastResReport.exec+
+      '<div class="print-pagebreak"></div>'+
+      '<h2 class="print-section-title first">Clientes recuperados</h2>'+lastResReport.rec+
+      '<div class="print-pagebreak"></div>'+
+      '<h2 class="print-section-title first">Encuesta</h2>'+lastResReport.enc;
+    document.body.classList.add('printing');
+    window.print();
+  }
+  window.addEventListener('afterprint',function(){ document.body.classList.remove('printing'); });
   function renderRes(){
     var c=counts(), body=document.getElementById('resBody');
     var contactados=c.env+c.seg+c.resp+c.cita+c.no, respondieron=c.resp+c.cita;
@@ -1503,6 +1534,8 @@
       '<div class="restab active" data-tab="exec">'+hExec+'</div>'+
       '<div class="restab" data-tab="rec">'+hRec+'</div>'+
       '<div class="restab" data-tab="enc">'+hEnc+'</div>';
+
+    lastResReport={exec:hExec,rec:hRec,enc:hEnc};
 
     Array.prototype.forEach.call(body.querySelectorAll('table.tbl tr[data-id]'),function(tr){
       tr.addEventListener('click',function(){
@@ -1641,6 +1674,7 @@
   }
   document.getElementById('exportBtn').addEventListener('click',function(){ closeMenu(); exportInforme(); });
   document.getElementById('resExport').addEventListener('click',exportInforme);
+  document.getElementById('resPrint').addEventListener('click',printInformeEjecutivo);
   document.getElementById('backupBtn').addEventListener('click',function(){ closeMenu();
     dl(new Blob([JSON.stringify({state:state,tpl:TPL})],{type:'application/json'}),'respaldo_recuperacion_'+stamp()+'.json'); });
   document.getElementById('restoreBtn').addEventListener('click',function(){ closeMenu(); document.getElementById('restoreFile').click(); });
