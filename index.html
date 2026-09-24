@@ -111,6 +111,8 @@
   .btn.ok:hover{filter:brightness(1.08); background:var(--wa);}
   .btn.ghost{background:transparent; border-color:transparent;}
   .btn.ghost:hover{background:var(--panel-3);}
+  .btn.recuperado-on{background:var(--good); border-color:var(--good); color:#fff;}
+  .btn.recuperado-on:hover{filter:brightness(1.08); background:var(--good);}
   .btn.sm{padding:5px 9px; font-size:11.5px;}
   .btn.lg{padding:13px 22px; font-size:14.5px; font-weight:640; border-radius:var(--r-lg);}
   .btn:disabled{opacity:.4; cursor:not-allowed;}
@@ -326,6 +328,12 @@
   .kpi-grid .kpi .v{font-size:23px;}
   .kpi-grid .kpi .l{margin-top:4px;}
   .kpi-grid .kpi.accent{background:var(--accent-soft,var(--panel-2));}
+  .hero-stat{background:var(--good-soft); border:1px solid var(--good); border-radius:var(--r-lg);
+    padding:20px 24px; margin-bottom:16px; display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;}
+  .hero-stat .hero-v{font-size:46px; font-weight:800; color:var(--good); line-height:1;}
+  .hero-stat .hero-t{display:flex; flex-direction:column; gap:2px;}
+  .hero-stat .hero-l{font-size:14px; font-weight:650; color:var(--text);}
+  .hero-stat .hero-s{font-size:12px; color:var(--text-faint);}
   .sec-t{font-size:14.5px; font-weight:680; margin:0 0 3px; letter-spacing:-.01em;}
   .sec-s{font-size:12px; color:var(--text-faint); margin:0 0 14px;}
 
@@ -730,7 +738,9 @@
   function isHot(v){ for(var i=0;i<VOLVER.length;i++) if(VOLVER[i].v===v) return !!VOLVER[i].hot; return false; }
   // "Cliente recuperado": la negociación quedó en estado "Acordado" — es la señal
   // más concreta de que el cliente realmente volvió, no solo que respondió o se reunió.
-  function esRecuperado(id){ var a=ans(id); return a.neg_estado==='Acordado'; }
+  // "Cliente recuperado": lo activa el % acordado en Negociación, o el botón manual
+  // "Marcar como recuperado" de la ficha — lo que se marque primero.
+  function esRecuperado(id){ var a=ans(id); return a.neg_estado==='Acordado' || !!a.recuperado; }
   function recoveredList(){ return RECORDS.filter(function(r){ return esRecuperado(r.id); }); }
 
   var DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
@@ -877,7 +887,10 @@
     h+='</div><div style="text-align:right"><span class="pill '+s+'">'+((s==='respondio'||s==='reunion_efectuada')?'✓ ':'')+esc(estadoLabel(s))+'</span>'+
       '<div style="margin-top:7px"><select id="estadoSel" style="font-size:11.5px;padding:5px 8px;width:auto">'+
       ESTADOS.map(function(o){ return '<option value="'+o.v+'"'+(s===o.v?' selected':'')+'>'+esc(o.l)+'</option>'; }).join('')+
-      '</select></div></div></div>';
+      '</select></div>'+
+      '<div style="margin-top:7px"><button type="button" id="recuperadoBtn" class="btn sm'+(esRecuperado(r.id)?' recuperado-on':'')+'">'+
+      (esRecuperado(r.id)?'★ Cliente recuperado':'☆ Marcar como recuperado')+'</button></div>'+
+      '</div></div>';
     h+='<div class="cgrid">'+cf('ID Excel',r.ext_id,'text')+cf('RUT',r.rut,'text')+cf('Teléfono',r.tel1,'tel')+
       (r.tel2&&r.tel2!==r.tel1?cf('Teléfono 2',r.tel2,'tel'):'')+cf('Email',email,'email')+'</div></div>';
 
@@ -1010,6 +1023,13 @@
   function wire(r,waText,email,follow,kind){
     var es=document.getElementById('estadoSel');
     if(es) es.addEventListener('change',function(){ setEstado(r, es.value); });
+    var rb=document.getElementById('recuperadoBtn');
+    if(rb) rb.addEventListener('click',function(){
+      var s=state[r.id]=state[r.id]||{};
+      s.recuperado=!s.recuperado; s.updated=new Date().toISOString();
+      saveState(r.id); renderKpis(); renderList(); renderDetail();
+      toast(s.recuperado?'Marcado como cliente recuperado.':'Ya no está marcado como recuperado.');
+    });
     var nc=document.getElementById('noContesto');
     if(nc) nc.addEventListener('click',function(){ setEstado(r,'no_contesto'); toast('Marcado: no contestó, se le escribió.'); });
     detail.querySelectorAll('.cp').forEach(function(b){
@@ -1388,7 +1408,10 @@
     // ---------- Tab 1: Resumen ejecutivo ----------
     var tasaResp=contactados?Math.round(respondieron/contactados*100):0;
     var tasaRec=contactados?Math.round(c.recuperados/contactados*100):0;
-    var hExec='<div class="kpi-grid">'+
+    var hExec='<div class="hero-stat"><div class="hero-v">'+tasaRec+'%</div>'+
+      '<div class="hero-t"><div class="hero-l">de los clientes contactados fueron recuperados</div>'+
+      '<div class="hero-s">'+c.recuperados+' de '+contactados+' contactados'+(respondieron?' · '+Math.round(c.recuperados/respondieron*100)+'% sobre los que respondieron':'')+'</div></div></div>';
+    hExec+='<div class="kpi-grid">'+
       kpiTile('Base total',c.total.toLocaleString('es-CL'))+
       kpiTile('Contactados',contactados.toLocaleString('es-CL'),Math.round(contactados/c.total*100)+'% de la base')+
       kpiTile('Tasa de respuesta',tasaResp+'%',respondieron+' de '+contactados+' contactados')+
