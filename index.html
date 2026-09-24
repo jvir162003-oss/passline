@@ -145,6 +145,7 @@
   .row.st-esperando .dot{background:var(--warn); box-shadow:0 0 0 3px var(--warn-soft);}
   .row.st-respondio .dot{background:var(--good);}
   .row.st-agendada .dot{background:var(--good); box-shadow:0 0 0 3px var(--good-soft);}
+  .row.st-reunion_efectuada .dot{background:var(--good); box-shadow:0 0 0 3px var(--good-soft);}
   .row.st-sin_respuesta .dot{background:var(--text-faint);}
   .row .rinfo{min-width:0; flex:1;}
   .rname{font-size:12.5px; font-weight:590; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -181,6 +182,7 @@
   .pill.esperando{background:var(--warn-soft); color:var(--warn);}
   .pill.respondio{background:var(--good-soft); color:var(--good);}
   .pill.agendada{background:var(--good-soft); color:var(--good);}
+  .pill.reunion_efectuada{background:var(--good-soft); color:var(--good);}
   .pill.sin_respuesta{background:var(--panel-3); color:var(--text-faint);}
 
   .cgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); gap:7px; margin-top:13px;}
@@ -311,6 +313,21 @@
   table.tbl td{padding:7px 9px; border-bottom:1px solid var(--border); font-variant-numeric:tabular-nums;}
   table.tbl td.name{font-variant-numeric:normal; font-weight:570;}
   table.tbl tr:last-child td{border-bottom:none;}
+  table.tbl tr[data-id]{cursor:pointer;}
+  table.tbl tr[data-id]:hover td{background:var(--panel-2);}
+
+  /* ---------- panel de resultados: pestañas + tiles ejecutivos ---------- */
+  #resTabs{margin:12px 19px; flex:none;}
+  .restab{display:none;}
+  .restab.active{display:block;}
+  .kpi-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); gap:1px;
+    background:var(--border); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; margin-bottom:24px;}
+  .kpi-grid .kpi{background:var(--panel); padding:14px 16px; border-left:none; text-align:left;}
+  .kpi-grid .kpi .v{font-size:23px;}
+  .kpi-grid .kpi .l{margin-top:4px;}
+  .kpi-grid .kpi.accent{background:var(--accent-soft,var(--panel-2));}
+  .sec-t{font-size:14.5px; font-weight:680; margin:0 0 3px; letter-spacing:-.01em;}
+  .sec-s{font-size:12px; color:var(--text-faint); margin:0 0 14px;}
 
   footer{padding:6px 20px; background:var(--panel); border-top:1px solid var(--border); font-size:10.5px; color:var(--text-faint); text-align:center;}
   input[type=file]{display:none;}
@@ -337,6 +354,7 @@
         <div class="kpi b"><div class="v" id="kSeg">0</div><div class="l">Esperando</div></div>
         <div class="kpi ok"><div class="v" id="kResp">0</div><div class="l">Respondieron</div></div>
         <div class="kpi hero"><div class="v" id="kCita">0</div><div class="l">Reuniones</div></div>
+        <div class="kpi hero" id="kpiReunionEfectuada" style="cursor:pointer" title="Clientes con reunión ya efectuada (tienen nota de la reunión cargada)"><div class="v" id="kReunionEfectuada">0</div><div class="l">Reunión efectuada</div></div>
       </div>
     </div>
     <div>
@@ -366,6 +384,7 @@
       <button data-status="esperando">Esperando respuesta</button>
       <button data-status="respondio">Respondieron</button>
       <button data-status="agendada">Con reunión</button>
+      <button data-status="reunion_efectuada">Reunión efectuada</button>
     </div>
     <span class="spacer"></span>
     <button class="btn ok" id="turboBtn">⚡ Modo envío</button>
@@ -529,8 +548,13 @@
   <div class="df"><button class="btn primary" id="waApiClose">Cerrar</button></div>
 </dialog>
 
-<dialog id="resDlg">
+<dialog id="resDlg" style="max-width:1080px">
   <div class="dh">Resultados<span class="sp"></span></div>
+  <div class="seg" id="resTabs">
+    <button data-tab="exec" class="active">Resumen ejecutivo</button>
+    <button data-tab="rec">Clientes recuperados</button>
+    <button data-tab="enc">Encuesta</button>
+  </div>
   <div class="db viz-root" id="resBody"></div>
   <div class="df"><button class="btn" id="resExport">⬇ Informe completo</button><button class="btn primary" id="resClose">Cerrar</button></div>
 </dialog>
@@ -656,6 +680,7 @@
     {v:'esperando',   l:'Esperando respuesta'},
     {v:'respondio',   l:'Respondió'},
     {v:'agendada',    l:'Reunión agendada'},
+    {v:'reunion_efectuada', l:'Reunión efectuada'},
     {v:'sin_respuesta',l:'Sin respuesta'}
   ];
   function estadoLabel(v){ for(var i=0;i<ESTADOS.length;i++) if(ESTADOS[i].v===v) return ESTADOS[i].l; return 'Sin contactar'; }
@@ -668,10 +693,15 @@
     if(r.rut) L.push('RUT: '+r.rut);
     if(r.tel1) L.push('Teléfono: '+r.tel1+(r.tel2&&r.tel2!==r.tel1?' / '+r.tel2:''));
     if(em) L.push('Email: '+em);
-    if(r.ejec) L.push('Ejecutivo: '+r.ejec+(r.cond?' · condición '+r.cond:''));
+    if(r.ejec) L.push('Ejecutivo: Equipo Comercial de Passline'+(r.cond?' · condición '+r.cond:''));
     L.push('Estado: '+estadoLabel(s));
     if(hasCita(r.id)){
       L.push('Reunión: '+fechaLarga(a.cita_fecha)+' · '+a.cita_hora+(a.cita_modalidad?' · '+a.cita_modalidad:''));
+    }
+    if(a.neg_pct||a.neg_estado||a.neg_nota){
+      L.push('');
+      L.push('Negociación: '+(a.neg_pct?a.neg_pct+' ':'')+(a.neg_estado?'('+a.neg_estado+')':'').trim());
+      if(a.neg_nota) L.push('Nota negociación: '+a.neg_nota);
     }
     L.push('');
     L.push('Notas de la reunión:');
@@ -685,12 +715,23 @@
     else if(!s.fecha_envio){ s.fecha_envio=new Date().toISOString(); s.canal=s.canal||'manual'; }
     if(v==='contactado'||v==='no_contesto'){ s.fecha_envio=s.fecha_envio||new Date().toISOString(); delete s.fecha_seguimiento; }
     if(v==='esperando' && !s.fecha_envio) s.fecha_envio=new Date().toISOString();
-    if(v==='agendada' && !hasCita(r.id)) v='respondio';
     s.status=v; s.updated=new Date().toISOString();
     saveState(r.id); renderKpis(); renderList(); renderDetail();
+    // "Reunión agendada" queda guardada igual aunque falte la fecha/hora real; solo se
+    // avisa para que no se olviden de completarla en "Agendar reunión" (más abajo).
+    if(v==='agendada' && !hasCita(r.id)) toast('Marcado como "Reunión agendada". No olvides poner fecha y hora en "Agendar reunión".');
+    if(v==='reunion_efectuada' && !(s.nota_reunion&&s.nota_reunion.trim())) toast('Marcado como "Reunión efectuada". No olvides completar la nota de la reunión más abajo.');
   }
   function hasCita(id){ var a=ans(id); return !!(a.cita_fecha&&a.cita_hora); }
+  // "Reunión efectuada": se toma como señal real de que la reunión ocurrió el que el estado
+  // se haya marcado manualmente como "Reunión efectuada", o que haya texto cargado en la
+  // nota de la reunión (item "Notas de la reunión"), lo que ocurra primero.
+  function reunionEfectuada(id){ var a=ans(id); return st(id)==='reunion_efectuada' || !!(a.nota_reunion&&a.nota_reunion.trim()); }
   function isHot(v){ for(var i=0;i<VOLVER.length;i++) if(VOLVER[i].v===v) return !!VOLVER[i].hot; return false; }
+  // "Cliente recuperado": la negociación quedó en estado "Acordado" — es la señal
+  // más concreta de que el cliente realmente volvió, no solo que respondió o se reunió.
+  function esRecuperado(id){ var a=ans(id); return a.neg_estado==='Acordado'; }
+  function recoveredList(){ return RECORDS.filter(function(r){ return esRecuperado(r.id); }); }
 
   var DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
   var MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -707,8 +748,8 @@
   function fill(t,r){
     var a=ans(r.id),s=suggestSlots();
     return String(t).replace(/\{nombre\}/g,nameOf(r))
-      .replace(/\{ejecutivo\}/g,r.ejec||'del equipo comercial')
-      .replace(/\{firma\}/g,r.ejec||'Equipo comercial')
+      .replace(/\{ejecutivo\}/g,'el equipo comercial')
+      .replace(/\{firma\}/g,'Equipo comercial')
       .replace(/\{horario1\}/g,slotLabel(s[0])).replace(/\{horario2\}/g,slotLabel(s[1]))
       .replace(/\{fecha_reunion\}/g,fechaLarga(a.cita_fecha)).replace(/\{hora_reunion\}/g,a.cita_hora||'')
       .replace(/\{modalidad\}/g,a.cita_modalidad||'llamada');
@@ -731,7 +772,8 @@
     if(fYear!=='all'&&String(r.year)!==fYear) return false;
     // "Contactados" = mensaje enviado y aun dentro del plazo de espera.
     // "Esperando respuesta" = enviado y ya pasaron los dias sin contestar.
-    if(fStatus!=='all'&&st(r.id)!==fStatus) return false;
+    if(fStatus==='reunion_efectuada'){ if(!reunionEfectuada(r.id)) return false; }
+    else if(fStatus!=='all'&&st(r.id)!==fStatus) return false;
     if(term){
       var h=(r.nombre_org+' '+r.nombre_fant+' '+r.rut+' '+r.email_reg+' '+r.email_org+' '+r.tel1+' '+r.tel2+' '+r.ejec).toLowerCase();
       if(h.indexOf(term)===-1) return false;
@@ -744,7 +786,9 @@
     for(var i=0;i<list.length;i++){
       var r=list[i], s=st(r.id), a=ans(r.id);
       var esp=needsFollowup(r.id);
-      var meta=hasCita(r.id)
+      var meta=s==='reunion_efectuada'
+        ? '<div class="rmeta cita" style="font-weight:700">✓ Reunión efectuada'+(hasCita(r.id)?' · '+fechaLarga(a.cita_fecha)+' '+a.cita_hora:'')+'</div>'
+        : hasCita(r.id)
         ? '<div class="rmeta cita">Reunión '+fechaLarga(a.cita_fecha)+' · '+a.cita_hora+'</div>'
         : esp
           ? '<div class="rmeta" style="color:var(--warn);font-weight:620">Esperando hace '+daysSince(a.fecha_envio)+' días</div>'
@@ -756,7 +800,7 @@
             ? '<div class="rmeta" style="color:var(--good);font-weight:600">✓ Respondió'+(a.q_volveria?' · '+esc(a.q_volveria.split(' ')[0]):'')+'</div>'
           : s==='sin_respuesta'
             ? '<div class="rmeta">Sin respuesta</div>'
-            : '<div class="rmeta">'+esc(r.ejec||r.rut||emailOf(r))+'</div>';
+            : '<div class="rmeta">'+esc(r.rut||emailOf(r))+'</div>';
       out.push('<div class="row st-'+s+(r.id===selectedId?' selected':'')+'" data-id="'+r.id+'">'+
         '<div class="idx">'+r.ord+'</div><div class="dot"></div>'+
         '<div class="rinfo"><div class="rname">'+esc(nameOf(r))+'</div>'+meta+'</div>'+
@@ -771,15 +815,17 @@
   });
 
   function counts(){
-    var c={total:RECORDS.length,env:0,resp:0,cita:0,no:0,seg:0,hot:0,real:0};
+    var c={total:RECORDS.length,env:0,resp:0,cita:0,no:0,seg:0,hot:0,real:0,notaReunion:0,recuperados:0};
     RECORDS.forEach(function(r){
       var s=st(r.id),a=ans(r.id);
       // env = contactado y aun esperando el plazo; seg = ya paso el plazo sin respuesta
       if(s==='contactado'||s==='no_contesto') c.env++; else if(s==='esperando') c.seg++;
       else if(s==='respondio') c.resp++;
-      else if(s==='agendada') c.cita++; else if(s==='sin_respuesta') c.no++;
+      else if(s==='agendada'||s==='reunion_efectuada') c.cita++; else if(s==='sin_respuesta') c.no++;
       if(a.q_volveria&&isHot(a.q_volveria)) c.hot++;
       if(a.cita_resultado==='Realizada') c.real++;
+      if(reunionEfectuada(r.id)) c.notaReunion++;
+      if(esRecuperado(r.id)) c.recuperados++;
     });
     return c;
   }
@@ -790,6 +836,7 @@
     document.getElementById('kSeg').textContent=c.seg;
     document.getElementById('kResp').textContent=c.resp+c.cita;
     document.getElementById('kCita').textContent=c.cita;
+    document.getElementById('kReunionEfectuada').textContent=c.notaReunion;
     document.getElementById('agendaCnt').textContent=upcoming().length;
     document.getElementById('fbCita').style.width=(c.cita/t*100)+'%';
     document.getElementById('fbResp').style.width=(c.resp/t*100)+'%';
@@ -826,8 +873,8 @@
     h+='<div class="card"><div class="chead"><div>';
     h+='<h2>'+esc(nameOf(r))+'<span class="badge y-'+r.year+'">'+r.year+'</span>'+(r.ejec?'<span class="badge">con ejecutivo</span>':'')+'</h2>';
     if(r.nombre_org&&r.nombre_org!==nameOf(r)) h+='<div style="color:var(--text-faint);font-size:12px;">'+esc(r.nombre_org)+'</div>';
-    if(r.ejec) h+='<div style="font-size:12px;margin-top:3px;">Ejecutivo <b>'+esc(r.ejec)+'</b>'+(r.cond?' · condición '+esc(r.cond):'')+'</div>';
-    h+='</div><div style="text-align:right"><span class="pill '+s+'">'+(s==='respondio'?'✓ ':'')+esc(estadoLabel(s))+'</span>'+
+    if(r.ejec) h+='<div style="font-size:12px;margin-top:3px;">Ejecutivo <b>Equipo Comercial de Passline</b>'+(r.cond?' · condición '+esc(r.cond):'')+'</div>';
+    h+='</div><div style="text-align:right"><span class="pill '+s+'">'+((s==='respondio'||s==='reunion_efectuada')?'✓ ':'')+esc(estadoLabel(s))+'</span>'+
       '<div style="margin-top:7px"><select id="estadoSel" style="font-size:11.5px;padding:5px 8px;width:auto">'+
       ESTADOS.map(function(o){ return '<option value="'+o.v+'"'+(s===o.v?' selected':'')+'>'+esc(o.l)+'</option>'; }).join('')+
       '</select></div></div></div>';
@@ -840,6 +887,20 @@
       '<button type="button" class="btn" id="copyAllBtn">📋 Copiar datos y nota</button>'+
       '<span class="saved" id="savedNota">✓ Guardada</span>'+
       (a.nota_reunion_fecha?'<span class="spacer"></span><span style="font-size:11px;color:var(--text-faint)">Última edición: '+new Date(a.nota_reunion_fecha).toLocaleString('es-CL')+'</span>':'')+
+      '</div></div>';
+
+    h+='<div class="card"><h3>💰 Negociación</h3>'+
+      '<div class="g2">'+
+      '<div><div class="ql">% acordado / en negociación</div><input type="text" id="negPct" placeholder="Ej: 12%" value="'+esc(a.neg_pct||'')+'"></div>'+
+      '<div><div class="ql">Estado</div><select id="negEstado">'+
+      ['','En negociación','Acordado'].map(function(o){
+        return '<option value="'+esc(o)+'"'+((a.neg_estado||'')===o?' selected':'')+'>'+(o||'Sin definir')+'</option>'; }).join('')+
+      '</select></div></div>'+
+      '<div class="q" style="margin-top:9px"><div class="ql">Nota</div>'+
+      '<textarea id="negNota" style="min-height:60px" placeholder="Condiciones, montos, plazos, pedidos especiales…">'+esc(a.neg_nota||'')+'</textarea></div>'+
+      '<div class="acts"><button type="button" class="btn ok" id="guardarNegBtn">Guardar negociación</button>'+
+      '<span class="saved" id="savedNeg">✓ Guardada</span>'+
+      (a.neg_fecha?'<span class="spacer"></span><span style="font-size:11px;color:var(--text-faint)">Última edición: '+new Date(a.neg_fecha).toLocaleString('es-CL')+'</span>':'')+
       '</div></div>';
 
     if(cita){
@@ -916,7 +977,7 @@
       return '<option value="'+d+'"'+((a.cita_dur||'15')===d?' selected':'')+'>'+d+' min</option>';}).join('')+'</select></div>';
     h+='<div><div class="ql">Modalidad</div><select id="cita_modalidad">'+MODALIDADES.map(function(m){
       return '<option value="'+esc(m)+'"'+((a.cita_modalidad||MODALIDADES[0])===m?' selected':'')+'>'+esc(m)+'</option>';}).join('')+'</select></div>';
-    h+='<div><div class="ql">Con quién</div><input type="text" id="cita_con" value="'+esc(a.cita_con||r.ejec||'')+'" placeholder="Ejecutivo a cargo"></div>';
+    h+='<div><div class="ql">Con quién</div><input type="text" id="cita_con" value="'+esc(a.cita_con||(r.ejec?'Equipo Comercial de Passline':''))+'" placeholder="Ejecutivo a cargo"></div>';
     h+='<div><div class="ql">Resultado</div><select id="cita_resultado">'+RESULTADOS.map(function(x){
       return '<option value="'+x+'"'+((a.cita_resultado||'Pendiente')===x?' selected':'')+'>'+x+'</option>';}).join('')+'</select></div>';
     h+='</div>';
@@ -938,7 +999,7 @@
     if(st(r.id)==='esperando'&&s.fecha_envio) s.fecha_seguimiento=new Date().toISOString();
     else s.fecha_envio=s.fecha_envio||new Date().toISOString();
     s.canal=s.canal?(s.canal.indexOf(canal)>-1?s.canal:s.canal+'+'+canal):canal;
-    if(s.status!=='respondio'&&s.status!=='agendada') s.status='contactado';
+    if(s.status!=='respondio'&&s.status!=='agendada'&&s.status!=='reunion_efectuada') s.status='contactado';
     saveState(r.id); renderKpis(); renderList();
   }
   function openWa(r,text){ window.open('https://wa.me/'+r.wa+'?text='+encodeURIComponent(text),'_blank'); }
@@ -1001,7 +1062,9 @@
       var s=state[r.id]=state[r.id]||{};
       s.nota_reunion=document.getElementById('notaReunion').value.trim();
       s.nota_reunion_fecha=new Date().toISOString();
-      saveState(r.id);
+      // Si queda texto cargado en la nota, la reunión se dio por efectuada automáticamente.
+      if(s.nota_reunion && s.status!=='reunion_efectuada') s.status='reunion_efectuada';
+      saveState(r.id); renderKpis(); renderList();
       var sv=document.getElementById('savedNota'); sv.classList.add('show');
       setTimeout(function(){sv.classList.remove('show');},1300);
       toast('Nota guardada.');
@@ -1011,6 +1074,19 @@
     if(cab) cab.addEventListener('click',function(){
       copy(buildCopyBlock(r,ans(r.id),st(r.id)));
       toast('Datos y nota copiados.');
+    });
+    var gnegb=document.getElementById('guardarNegBtn');
+    if(gnegb) gnegb.addEventListener('click',function(){
+      var s=state[r.id]=state[r.id]||{};
+      s.neg_pct=document.getElementById('negPct').value.trim();
+      s.neg_estado=document.getElementById('negEstado').value;
+      s.neg_nota=document.getElementById('negNota').value.trim();
+      s.neg_fecha=new Date().toISOString();
+      saveState(r.id);
+      var sv=document.getElementById('savedNeg'); sv.classList.add('show');
+      setTimeout(function(){sv.classList.remove('show');},1300);
+      toast('Negociación guardada.');
+      renderDetail();
     });
 
     // Guardar la encuesta, con o sin reunion
@@ -1168,7 +1244,7 @@
     var body=tChan==='email'?fill(TPL.mailBody,r):txt;
     var can=tChan==='email'?!!email:!!r.wa;
     var h='<div class="tmeta"><span class="pri-tag y-'+r.year+'">'+r.year+'</span>'+
-      '<span>#'+r.ord+'</span>'+(r.ejec?'<span>· '+esc(r.ejec)+'</span>':'')+
+      '<span>#'+r.ord+'</span>'+
       (needsFollowup(r.id)?'<span style="color:var(--warn);font-weight:700">· SEGUIMIENTO</span>':'')+'</div>';
     h+='<h2 class="tname">'+esc(nameOf(r))+'</h2>';
     h+='<div class="tmeta">'+esc(tChan==='email'?(email||'sin email'):(r.tel1||'sin teléfono'))+
@@ -1272,7 +1348,7 @@
     var list=waApiTargets(); if(!list.length) return;
     var out=[['orden','telefono','variable_1_nombre','variable_2_ejecutivo','año','ejecutivo_asignado','rut','email','id_passline'].join(';')];
     list.forEach(function(r){
-      out.push([r.ord, r.wa, nameOf(r), r.ejec||'del equipo comercial', r.year, r.ejec?'Sí':'No', r.rut, emailOf(r), r.ext_id].map(ce).join(';'));
+      out.push([r.ord, r.wa, nameOf(r), 'el equipo comercial', r.year, r.ejec?'Sí':'No', r.rut, emailOf(r), r.ext_id].map(ce).join(';'));
     });
     dl(new Blob(['﻿'+out.join('\r\n')],{type:'text/csv;charset=utf-8;'}),'whatsapp_api_destinatarios_'+stamp()+'.csv');
     toast(list.length.toLocaleString('es-CL')+' destinatarios exportados.');
@@ -1286,90 +1362,138 @@
 
   // ---------- resultados ----------
   var ORD=['var(--ord-1)','var(--ord-2)','var(--ord-3)','var(--ord-4)','var(--ord-5)'];
+  function barChart(title,sub,data,opts){
+    // data: [{k,v}], opts: {hotFn, totalLabel}
+    opts=opts||{};
+    var h='<div class="chart"><p class="chart-t">'+esc(title)+'</p><p class="chart-s">'+esc(sub)+'</p>';
+    if(!data.length){ h+='<div class="noviz">Todavía sin datos.</div></div>'; return h; }
+    var max=Math.max.apply(null,data.map(function(d){return d.v;}));
+    data.forEach(function(d){
+      var w=Math.max(d.v/max*100,2), hot=opts.hotFn&&opts.hotFn(d.k);
+      h+='<div class="brow"><div class="blab" title="'+esc(d.k)+'">'+esc(d.k)+'</div>'+
+        '<div class="btrack"><div class="bfill" style="width:'+w+'%'+(hot?';background:var(--good)':'')+'"></div>'+
+        '<div class="bval" style="left:'+w+'%">'+d.v+(opts.pctOf?' · '+Math.round(d.v/opts.pctOf*100)+'%':'')+'</div></div></div>';
+    });
+    h+='</div>';
+    return h;
+  }
+  function kpiTile(l,v,s,accent){
+    return '<div class="kpi'+(accent?' accent':'')+'"><div class="v">'+v+'</div><div class="l">'+esc(l)+'</div>'+(s?'<div class="s" style="font-size:11px;color:var(--text-faint);margin-top:2px">'+esc(s)+'</div>':'')+'</div>';
+  }
   function renderRes(){
     var c=counts(), body=document.getElementById('resBody');
     var contactados=c.env+c.seg+c.resp+c.cita+c.no, respondieron=c.resp+c.cita;
-    var stages=[
-      {l:'Contactados',v:contactados},{l:'Respondieron',v:respondieron},
-      {l:'Volverían si mejora',v:c.hot},{l:'Reunión agendada',v:c.cita},{l:'Reunión realizada',v:c.real}
-    ];
-    var h='';
-    if(!contactados){ body.innerHTML='<div class="noviz">Aún no has contactado a nadie. Cuando empieces, acá verás el embudo, los motivos de baja y el avance por ejecutivo.</div>'; return; }
+    if(!contactados){ body.innerHTML='<div class="noviz">Aún no has contactado a nadie. Cuando empieces, acá verás el resumen ejecutivo, los clientes recuperados y el análisis de la encuesta.</div>'; return; }
 
-    h+='<div class="chart"><p class="chart-t">Embudo de recuperación</p>'+
-       '<p class="chart-s">De cada etapa a la siguiente. La conversión se lee respecto de la etapa anterior.</p>';
-    var max=stages[0].v||1;
+    // ---------- Tab 1: Resumen ejecutivo ----------
+    var tasaResp=contactados?Math.round(respondieron/contactados*100):0;
+    var tasaRec=contactados?Math.round(c.recuperados/contactados*100):0;
+    var hExec='<div class="kpi-grid">'+
+      kpiTile('Base total',c.total.toLocaleString('es-CL'))+
+      kpiTile('Contactados',contactados.toLocaleString('es-CL'),Math.round(contactados/c.total*100)+'% de la base')+
+      kpiTile('Tasa de respuesta',tasaResp+'%',respondieron+' de '+contactados+' contactados')+
+      kpiTile('Reuniones agendadas',String(c.cita))+
+      kpiTile('Reuniones efectuadas',String(c.notaReunion),'con nota de la reunión cargada')+
+      kpiTile('Clientes recuperados',String(c.recuperados),tasaRec+'% de los contactados',true)+
+      '</div>';
+    var stages=[
+      {l:'Contactados',v:contactados,c:ORD[0]},{l:'Respondieron',v:respondieron,c:ORD[1]},
+      {l:'Volverían si mejora',v:c.hot,c:ORD[2]},{l:'Reunión agendada',v:c.cita,c:ORD[3]},
+      {l:'Reunión efectuada',v:c.notaReunion,c:ORD[4]},{l:'Recuperado',v:c.recuperados,c:'var(--good)'}
+    ];
+    hExec+='<div class="chart"><p class="chart-t">Embudo de recuperación</p>'+
+       '<p class="chart-s">De cada etapa a la siguiente, hasta el cliente recuperado. La conversión se lee respecto de la etapa anterior.</p>';
+    var maxF=stages[0].v||1;
     stages.forEach(function(s,i){
-      var w=Math.max(s.v/max*100, s.v>0?1.5:0);
+      var w=Math.max(s.v/maxF*100, s.v>0?1.5:0);
       var prev=i>0?stages[i-1].v:0;
       var pct=i>0&&prev?'→ '+Math.round(s.v/prev*100)+'%':'';
       var inside=w>14;
-      h+='<div class="frow"><div class="flab">'+esc(s.l)+'</div>'+
-        '<div class="ftrack"><div class="ffill" style="width:'+w+'%;background:'+ORD[i]+'"></div>'+
+      hExec+='<div class="frow"><div class="flab">'+esc(s.l)+'</div>'+
+        '<div class="ftrack"><div class="ffill" style="width:'+w+'%;background:'+s.c+'"></div>'+
         (inside?'<div class="fval">'+s.v.toLocaleString('es-CL')+'</div>'
                :'<div class="fval out" style="left:calc('+w+'% + 8px)">'+s.v.toLocaleString('es-CL')+'</div>')+
         '</div><div class="fpct">'+pct+'</div></div>';
     });
-    h+='</div>';
+    hExec+='</div>';
 
-    // si mejorara, volveria
-    var vol={}; RECORDS.forEach(function(r){ var a=ans(r.id); if(a.q_volveria) vol[a.q_volveria]=(vol[a.q_volveria]||0)+1; });
-    var volTot=Object.keys(vol).reduce(function(s,k){return s+vol[k];},0);
-    h+='<div class="chart"><p class="chart-t">Si mejoraran las condiciones, ¿volvería?</p>'+
-      '<p class="chart-s">Sobre '+volTot+' respuesta'+(volTot===1?'':'s')+' registrada'+(volTot===1?'':'s')+'.</p>';
-    if(!volTot) h+='<div class="noviz">Todavía sin respuestas.</div>';
-    else{
-      var vk=VOLVER.map(function(o){return o.v;}).filter(function(k){return vol[k];});
-      var vmax=Math.max.apply(null,vk.map(function(k){return vol[k];}));
-      vk.forEach(function(k){
-        var w=Math.max(vol[k]/vmax*100,2), hot=isHot(k);
-        h+='<div class="brow"><div class="blab" title="'+esc(k)+'">'+esc(k)+'</div>'+
-          '<div class="btrack"><div class="bfill" style="width:'+w+'%'+(hot?';background:var(--good)':'')+'"></div>'+
-          '<div class="bval" style="left:'+w+'%">'+vol[k]+' · '+Math.round(vol[k]/volTot*100)+'%</div></div></div>';
+    // ---------- Tab 2: Clientes recuperados ----------
+    var recu=recoveredList();
+    var hRec='<div class="kpi-grid">'+
+      kpiTile('Clientes recuperados',String(recu.length),null,true)+
+      kpiTile('% sobre contactados',tasaRec+'%')+
+      kpiTile('% sobre los que respondieron',respondieron?Math.round(recu.length/respondieron*100)+'%':'—')+
+      '</div>';
+    if(!recu.length){
+      hRec+='<div class="noviz">Todavía no hay clientes marcados como "Acordado" en Negociación. Cuando cierres el primero, va a aparecer acá.</div>';
+    } else {
+      hRec+='<p class="sec-t">Detalle</p><p class="sec-s">Clic en un cliente para abrir su ficha.</p>';
+      hRec+='<table class="tbl"><thead><tr><th>Cliente</th><th>Año</th><th>% acordado</th><th>Última actualización</th><th>Nota</th></tr></thead><tbody>';
+      recu.sort(function(x,y){ return (ans(y.id).neg_fecha||'').localeCompare(ans(x.id).neg_fecha||''); });
+      recu.forEach(function(r){
+        var a=ans(r.id);
+        var nota=(a.neg_nota||'').trim(); if(nota.length>60) nota=nota.slice(0,60)+'…';
+        hRec+='<tr data-id="'+r.id+'"><td class="name">'+esc(nameOf(r))+'</td><td>'+r.year+'</td><td>'+esc(a.neg_pct||'—')+'</td>'+
+          '<td>'+(a.neg_fecha?new Date(a.neg_fecha).toLocaleDateString('es-CL'):'—')+'</td><td>'+esc(nota||'—')+'</td></tr>';
       });
+      hRec+='</tbody></table>';
     }
-    h+='</div>';
 
-    // motivos
+    // ---------- Tab 3: Encuesta ----------
+    var hEnc='';
+    var contAntes={}; RECORDS.forEach(function(r){ var a=ans(r.id); if(a.q_contactado_antes) contAntes[a.q_contactado_antes]=(contAntes[a.q_contactado_antes]||0)+1; });
+    var caTot=Object.keys(contAntes).reduce(function(s,k){return s+contAntes[k];},0);
+    hEnc+=barChart('¿Ya los habían contactado antes?','Sobre '+caTot+' respuesta'+(caTot===1?'':'s')+' registrada'+(caTot===1?'':'s')+'.',
+      Object.keys(contAntes).sort(function(x,y){return contAntes[y]-contAntes[x];}).map(function(k){return {k:k,v:contAntes[k]};}));
+
     var mot={}; RECORDS.forEach(function(r){ var a=ans(r.id);
       if(!a.q_motivo) return; var k=a.q_motivo==='Otros'?(a.q_motivo_otros||'Otros'):a.q_motivo;
       mot[k]=(mot[k]||0)+1; });
-    var mk=Object.keys(mot).sort(function(x,y){return mot[y]-mot[x];});
-    h+='<div class="chart"><p class="chart-t">Por qué se fueron</p><p class="chart-s">Sobre '+
-      Object.keys(mot).reduce(function(s,k){return s+mot[k];},0)+' respuestas registradas.</p>';
-    if(!mk.length) h+='<div class="noviz">Todavía sin motivos registrados.</div>';
-    else{
-      var mmax=mot[mk[0]];
-      mk.forEach(function(k){
-        var w=Math.max(mot[k]/mmax*100,2);
-        h+='<div class="brow"><div class="blab" title="'+esc(k)+'">'+esc(k)+'</div>'+
-          '<div class="btrack"><div class="bfill" style="width:'+w+'%"></div>'+
-          '<div class="bval" style="left:'+w+'%">'+mot[k]+'</div></div></div>';
-      });
-    }
-    h+='</div>';
+    var motTot=Object.keys(mot).reduce(function(s,k){return s+mot[k];},0);
+    hEnc+=barChart('Por qué se fueron','Sobre '+motTot+' respuesta'+(motTot===1?'':'s')+' registrada'+(motTot===1?'':'s')+'.',
+      Object.keys(mot).sort(function(x,y){return mot[y]-mot[x];}).map(function(k){return {k:k,v:mot[k]};}));
 
-    // por ejecutivo
-    var ej={};
-    RECORDS.forEach(function(r){
-      if(!r.ejec) return; var s=st(r.id);
-      var e=ej[r.ejec]=ej[r.ejec]||{tot:0,cont:0,resp:0,cita:0};
-      e.tot++;
-      if(s!=='pendiente') e.cont++;
-      if(s==='respondio'||s==='agendada') e.resp++;
-      if(s==='agendada') e.cita++;
+    var vol={}; RECORDS.forEach(function(r){ var a=ans(r.id); if(a.q_volveria) vol[a.q_volveria]=(vol[a.q_volveria]||0)+1; });
+    var volTot=Object.keys(vol).reduce(function(s,k){return s+vol[k];},0);
+    hEnc+=barChart('Si mejoraran las condiciones, ¿volvería?','Sobre '+volTot+' respuesta'+(volTot===1?'':'s')+' registrada'+(volTot===1?'':'s')+'.',
+      VOLVER.map(function(o){return o.v;}).filter(function(k){return vol[k];}).map(function(k){return {k:k,v:vol[k]};}),
+      {hotFn:isHot});
+
+    // motivos más recuperables: de los que dieron un motivo Y una respuesta de "volvería", % que es "hot"
+    var motRec={};
+    RECORDS.forEach(function(r){ var a=ans(r.id); if(!a.q_motivo||!a.q_volveria) return;
+      var k=a.q_motivo==='Otros'?(a.q_motivo_otros||'Otros'):a.q_motivo;
+      motRec[k]=motRec[k]||{n:0,hot:0}; motRec[k].n++; if(isHot(a.q_volveria)) motRec[k].hot++; });
+    var mrk=Object.keys(motRec).sort(function(x,y){return (motRec[y].hot/motRec[y].n)-(motRec[x].hot/motRec[x].n)||motRec[y].n-motRec[x].n;});
+    hEnc+='<p class="sec-t">Motivos más recuperables</p><p class="sec-s">De los clientes que dieron un motivo y respondieron si volverían, ordenado por % con intención de volver.</p>';
+    if(!mrk.length) hEnc+='<div class="noviz">Todavía sin suficientes respuestas cruzadas.</div>';
+    else{
+      hEnc+='<table class="tbl"><thead><tr><th>Motivo</th><th>Respuestas</th><th>% volvería</th></tr></thead><tbody>';
+      mrk.forEach(function(k){
+        var m=motRec[k], pct=Math.round(m.hot/m.n*100);
+        hEnc+='<tr><td class="name">'+esc(k)+'</td><td>'+m.n+'</td><td>'+pct+'%</td></tr>';
+      });
+      hEnc+='</tbody></table>';
+    }
+
+    body.innerHTML=
+      '<div class="restab active" data-tab="exec">'+hExec+'</div>'+
+      '<div class="restab" data-tab="rec">'+hRec+'</div>'+
+      '<div class="restab" data-tab="enc">'+hEnc+'</div>';
+
+    Array.prototype.forEach.call(body.querySelectorAll('table.tbl tr[data-id]'),function(tr){
+      tr.addEventListener('click',function(){
+        var id=parseInt(tr.getAttribute('data-id'),10);
+        resDlg.close(); select(id);
+      });
     });
-    var ek=Object.keys(ej).sort(function(x,y){return ej[y].cita-ej[x].cita||ej[y].cont-ej[x].cont;});
-    h+='<div class="chart"><p class="chart-t">Avance por ejecutivo</p>'+
-      '<p class="chart-s">Solo los 420 clientes que tienen ejecutivo asignado en la base.</p>';
-    h+='<table class="tbl"><thead><tr><th>Ejecutivo</th><th>Cartera</th><th>Contactados</th><th>Respondieron</th><th>Reuniones</th><th>Conversión</th></tr></thead><tbody>';
-    ek.forEach(function(k){
-      var e=ej[k], conv=e.cont?Math.round(e.cita/e.cont*100)+'%':'—';
-      h+='<tr><td class="name">'+esc(k)+'</td><td>'+e.tot+'</td><td>'+e.cont+'</td><td>'+e.resp+'</td><td><b>'+e.cita+'</b></td><td>'+conv+'</td></tr>';
-    });
-    h+='</tbody></table></div>';
-    body.innerHTML=h;
   }
+  document.getElementById('resTabs').addEventListener('click',function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    var tab=b.getAttribute('data-tab');
+    this.querySelectorAll('button').forEach(function(x){x.classList.toggle('active',x===b);});
+    document.querySelectorAll('#resBody .restab').forEach(function(x){x.classList.toggle('active',x.getAttribute('data-tab')===tab);});
+  });
 
   // ---------- utils ----------
   function copy(t){
@@ -1411,6 +1535,12 @@
   document.getElementById('statusSeg').addEventListener('click',function(e){
     var b=e.target.closest('button'); if(!b) return; fStatus=b.getAttribute('data-status');
     this.querySelectorAll('button').forEach(function(x){x.classList.remove('active');}); b.classList.add('active'); renderList();
+  });
+  document.getElementById('kpiReunionEfectuada').addEventListener('click',function(){
+    fStatus='reunion_efectuada';
+    var seg=document.getElementById('statusSeg');
+    seg.querySelectorAll('button').forEach(function(x){x.classList.toggle('active', x.getAttribute('data-status')==='reunion_efectuada');});
+    renderList();
   });
   document.getElementById('nextBtn').addEventListener('click',function(){
     var list=filtered();
@@ -1465,7 +1595,9 @@
       // Reunion
       'reunion_fecha','reunion_hora','reunion_duracion','reunion_modalidad','reunion_con','reunion_resultado','reunion_notas',
       // Nota libre de la reunion (qué se habló)
-      'nota_reunion','nota_reunion_fecha'];
+      'nota_reunion','nota_reunion_fecha','reunion_efectuada',
+      // Negociación
+      'negociacion_pct','negociacion_estado','negociacion_nota','negociacion_fecha','cliente_recuperado'];
     var out=[cols.join(';')];
     RECORDS.forEach(function(r){
       var a=ans(r.id), s=st(r.id);
@@ -1477,7 +1609,8 @@
         a.q_datos||r.rut||'',a.q_contactado_antes||'',a.q_comentario1||'',
         a.q_motivo||'',a.q_motivo_otros||'',motivoFinal,a.q_comentario2||'',a.q_volveria||'',
         fechaCorta(a.cita_fecha),a.cita_hora||'',a.cita_dur||'',a.cita_modalidad||'',a.cita_con||'',a.cita_resultado||'',a.cita_notas||'',
-        a.nota_reunion||'',soloFecha(a.nota_reunion_fecha)
+        a.nota_reunion||'',soloFecha(a.nota_reunion_fecha),(reunionEfectuada(r.id)?'Sí':'No'),
+        a.neg_pct||'',a.neg_estado||'',a.neg_nota||'',soloFecha(a.neg_fecha),(esRecuperado(r.id)?'Sí':'No')
       ].map(ce).join(';'));
     });
     dl(new Blob(['﻿'+out.join('\r\n')],{type:'text/csv;charset=utf-8;'}),'informe_recuperacion_'+stamp()+'.csv');
